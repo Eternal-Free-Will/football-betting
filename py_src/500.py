@@ -222,7 +222,7 @@ def process_single_match(fid, league, home, away, m_time, folder_path):
     # 使用 'w' 模式写入新文件
     with open(file_path, 'w', encoding='utf-8') as f:
         f.write(f"{'='*60}\n")
-        f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away}\n")
+        f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away} | ID: {fid}\n")
         f.write(f"{'='*60}\n")
 
         # --- 第一部分：处理亚盘 ---
