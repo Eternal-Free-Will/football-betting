@@ -7,9 +7,14 @@ import time
 import random
 import argparse
 from datetime import datetime
+import re # 用于清理非法文件名字符
+import os
 
 # 请求时的通用User_Agent
 USERAGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
+
+# 配置目标联赛名称
+TARGET_LEAGUES = ["英超", "英冠", "欧冠"]
 
 # 配置目标机构 ID 和名称
 TARGET_COMPANIES = {
@@ -19,8 +24,15 @@ TARGET_COMPANIES = {
     "2": "立博",
     "5": "澳门",
     "9": "易胜博",
-    "3": "Bet365"
+    "3": "Bet365",
+    "1": "竞彩官方"
 }
+
+def sanitize_filename(name):
+    """
+    清理文件名中的非法字符，防止报错
+    """
+    return re.sub(r'[\\/:*?"<>|]', '_', name)
 
 def parse_custom_time(time_str):
     """
@@ -184,97 +196,106 @@ def get_ouzhi_detail(fid, comp_id, data_time, max_retries=15):
     return [] # 超过最大重试次数依然无果，返回空
 
 # 获取单场比赛“亚盘、大小球、欧赔”维度数据
-def process_single_match(fid, league, home, away, m_time, f):
+def process_single_match(fid, league, home, away, m_time, folder_path):
     """
     :param fid: 比赛 ID
     :param league: 联赛信息
     :param home: 主队
     :param away: 客队
     :param m_time: 赛事时间
-    :param f: 文件描述符，用于文件写入
+    :param folder_path: 单场比赛数据存入单个文件
     """
+    # 构造专属文件名：[18-30]英超_阿森纳VS曼联.txt (取时间的分秒部分)
+    time_short = m_time.split(' ')[1].replace(':', '-')
+    file_name = f"[{time_short}]{league}_{home}VS{away}.txt"
+    file_name = sanitize_filename(file_name)
+    file_path = os.path.join(folder_path, file_name)
+
     headers = {'User-Agent': USERAGENT}
     
-    f.write(f"{'='*60}\n")
-    f.write(f"{league} | 北京时间: {m_time} | {home} VS {away}\n") #  | ID: {fid}
-    f.write(f"{'='*60}\n")
+    # 使用 'w' 模式写入新文件
+    with open(file_path, 'w', encoding='utf-8') as f:
+        f.write(f"{'='*60}\n")
+        f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away}\n")
+        f.write(f"{'='*60}\n")
 
-    # --- 第一部分：处理亚盘 ---
-    f.write("\n【 亚盘指数变动 】\n")
-    yazhi_url = f"https://odds.500.com/fenxi/yazhi-{fid}.shtml"
-    try:
-        y_res = requests.get(yazhi_url, headers=headers, timeout=5)
-        y_res.encoding = 'gbk'
-        y_soup = BeautifulSoup(y_res.text, 'lxml')
-        y_table = y_soup.find('table', id='datatb')
-        if y_table:
-            rows = y_table.find_all('tr', id=True)
-            for tr in rows:
-                cid = tr.get('id')
-                if cid in TARGET_COMPANIES:
-                    f.write(f"  机构: {TARGET_COMPANIES[cid]}\n")
-                    history = get_yazhi_detail(fid, cid)
-                    f.write("\n".join(history) + "\n" if history else "    (多次尝试该机构暂无亚盘历史变动数据)\n")
-                    f.write("  " + "-"*50 + "\n")
-        else:
-            f.write("  未在页面找到亚盘盘口数据表 table#datatb\n")
-    except Exception as e:
-        f.write(f"  亚盘对比页面访问异常: {e}\n")
+        # --- 第一部分：处理亚盘 ---
+        f.write("\n【 亚盘指数变动 】\n")
+        yazhi_url = f"https://odds.500.com/fenxi/yazhi-{fid}.shtml"
+        try:
+            y_res = requests.get(yazhi_url, headers=headers, timeout=5)
+            y_res.encoding = 'gbk'
+            y_soup = BeautifulSoup(y_res.text, 'lxml')
+            y_table = y_soup.find('table', id='datatb')
+            if y_table:
+                rows = y_table.find_all('tr', id=True)
+                for tr in rows:
+                    cid = tr.get('id')
+                    if cid in TARGET_COMPANIES:
+                        f.write(f"  机构: {TARGET_COMPANIES[cid]}\n")
+                        history = get_yazhi_detail(fid, cid)
+                        f.write("\n".join(history) + "\n" if history else "    (多次尝试该机构暂无亚盘历史变动数据)\n")
+                        f.write("  " + "-"*50 + "\n")
+            else:
+                f.write("  未在页面找到亚盘盘口数据表 table#datatb\n")
+        except Exception as e:
+            f.write(f"  亚盘对比页面访问异常: {e}\n")
 
-    # --- 第二部分：处理大小球 ---
-    f.write("\n【 大小球指数变动 】\n")
-    daxiao_url = f"https://odds.500.com/fenxi/daxiao-{fid}.shtml"
-    try:
-        d_res = requests.get(daxiao_url, headers=headers, timeout=5)
-        d_res.encoding = 'gbk'
-        d_soup = BeautifulSoup(d_res.text, 'lxml')
-        d_table = d_soup.find('table', id='datatb')
-        if d_table:
-            rows = d_table.find_all('tr', id=True)
-            for tr in rows:
-                cid = tr.get('id')
-                if cid in TARGET_COMPANIES:
-                    f.write(f"  机构: {TARGET_COMPANIES[cid]}\n")
-                    history = get_daxiao_detail(fid, cid)
-                    f.write("\n".join(history) + "\n" if history else "    (多次尝试该机构暂无大小球盘历史变动数据)\n")
-                    f.write("  " + "-"*50 + "\n")
-        else:
-            f.write("  未在页面找到大小球盘口数据表 table#datatb\n")
-    except Exception as e:
-        f.write(f"  大小指数页面访问异常: {e}\n")
-    
-    # --- 第三部分：处理欧赔 ---
-    f.write("\n【 欧赔指数变动 】\n")
-    ouzhi_url = f"https://odds.500.com/fenxi/ouzhi-{fid}.shtml"
-    try:
-        o_res = requests.get(ouzhi_url, headers=headers, timeout=5)
-        o_res.encoding = 'gbk'
-        o_soup = BeautifulSoup(o_res.text, 'lxml')
-        o_table = o_soup.find('table', id='datatb')
-        if o_table:
-            # 找到页面上所有的机构行
-            rows = o_table.find_all('tr', id=True)
-            for tr in rows:
-                # 500网欧赔页面的id有时带有 tr_ 前缀，需要清洗
-                raw_id = tr.get('id')
-                cid = raw_id.replace('tr_', '').replace('tr', '')
+        # --- 第二部分：处理大小球 ---
+        f.write("\n【 大小球指数变动 】\n")
+        daxiao_url = f"https://odds.500.com/fenxi/daxiao-{fid}.shtml"
+        try:
+            d_res = requests.get(daxiao_url, headers=headers, timeout=5)
+            d_res.encoding = 'gbk'
+            d_soup = BeautifulSoup(d_res.text, 'lxml')
+            d_table = d_soup.find('table', id='datatb')
+            if d_table:
+                rows = d_table.find_all('tr', id=True)
+                for tr in rows:
+                    cid = tr.get('id')
+                    if cid in TARGET_COMPANIES:
+                        f.write(f"  机构: {TARGET_COMPANIES[cid]}\n")
+                        history = get_daxiao_detail(fid, cid)
+                        f.write("\n".join(history) + "\n" if history else "    (多次尝试该机构暂无大小球盘历史变动数据)\n")
+                        f.write("  " + "-"*50 + "\n")
+            else:
+                f.write("  未在页面找到大小球盘口数据表 table#datatb\n")
+        except Exception as e:
+            f.write(f"  大小指数页面访问异常: {e}\n")
+        
+        # --- 第三部分：处理欧赔 ---
+        f.write("\n【 欧赔指数变动 】\n")
+        ouzhi_url = f"https://odds.500.com/fenxi/ouzhi-{fid}.shtml"
+        try:
+            o_res = requests.get(ouzhi_url, headers=headers, timeout=5)
+            o_res.encoding = 'gbk'
+            o_soup = BeautifulSoup(o_res.text, 'lxml')
+            o_table = o_soup.find('table', id='datatb')
+            if o_table:
+                # 找到页面上所有的机构行
+                rows = o_table.find_all('tr', id=True)
+                for tr in rows:
+                    # 500网欧赔页面的id有时带有 tr_ 前缀，需要清洗
+                    raw_id = tr.get('id')
+                    cid = raw_id.replace('tr_', '').replace('tr', '')
 
-                # 【关键逻辑】：提取该机构在页面上显示的最后更新时间
-                row_data_time = tr.get('data-time')
-                
-                if cid in TARGET_COMPANIES and row_data_time:
-                    f.write(f"  机构: {TARGET_COMPANIES[cid]} (最近更新: {row_data_time})\n")
+                    # 【关键逻辑】：提取该机构在页面上显示的最后更新时间
+                    row_data_time = tr.get('data-time')
+                    
+                    if cid in TARGET_COMPANIES and row_data_time:
+                        f.write(f"  机构: {TARGET_COMPANIES[cid]} (最近更新: {row_data_time})\n")
 
-                    # 传入从 HTML 属性中拿到的 row_data_time
-                    history = get_ouzhi_detail(fid, cid, row_data_time)
-                    f.write("\n".join(history) + "\n" if history else "    (多次尝试该机构暂无欧赔历史变动数据)\n")
-                    f.write("  " + "-"*50 + "\n")
-        else:
-            f.write("  未在页面找到欧赔数据表 table#datatb\n")
-    except Exception as e:
-        f.write(f"  百家欧赔页面访问异常: {e}\n")
-    
-    f.write("\n\n")
+                        # 传入从 HTML 属性中拿到的 row_data_time
+                        history = get_ouzhi_detail(fid, cid, row_data_time)
+                        f.write("\n".join(history) + "\n" if history else "    (多次尝试该机构暂无欧赔历史变动数据)\n")
+                        f.write("  " + "-"*50 + "\n")
+            else:
+                f.write("  未在页面找到欧赔数据表 table#datatb\n")
+        except Exception as e:
+            f.write(f"  百家欧赔页面访问异常: {e}\n")
+        
+        f.write("\n\n")
+    print(f"  [完成] 数据已存至: {file_name}")
 
 # 获取所有比赛的“亚盘、大小球、欧赔”数据
 def scrape_500_full_data(start_dt, end_dt):
@@ -287,56 +308,64 @@ def scrape_500_full_data(start_dt, end_dt):
     headers = {'User-Agent': USERAGENT}
     
     try:
-        print("开始获取赛事列表...")
-        res = requests.get(base_url, headers=headers)
+        print(f"[{datetime.now().strftime('%H:%M:%S')}] 正在连接 500.com 赛事列表...")
+        res = requests.get(base_url, headers=headers, timeout=10)
         res.encoding = 'gbk'
         soup = BeautifulSoup(res.text, 'lxml')
         match_rows = soup.select('table.bet-tb-dg tr.bet-tb-tr')
 
         if not match_rows:
-            print("未找到比赛数据。")
+            print("未找到比赛数据，请检查网络或 URL 是否有效。")
             return
+        
+        # --- 新增：创建本次运行的专属文件夹 ---
+        dir_name = f"analysis_{time.strftime('%Y%m%d_%H%M%S')}"
+        if not os.path.exists(dir_name):
+            os.makedirs(dir_name)
+            print(f"已创建文件夹: {dir_name}")
 
         seen_ids = set()
-        filename = f"football_500_analysis_{time.strftime('%Y%m%d_%H%M%S')}.txt"
-
         count = 0
 
-        with open(filename, 'w', encoding='utf-8') as f:
-            for row in match_rows:
-                # 提取比赛日期和时间
-                m_date = row.get('data-matchdate')
-                m_time = row.get('data-matchtime')
-                if not m_date or not m_time: continue
+        for row in match_rows:
+            # 1. 提取联赛名并过滤 (增加 strip 防止空格干扰)
+            league = row.get('data-simpleleague', '未知联赛').strip()
+            if TARGET_LEAGUES and not any(name in league for name in TARGET_LEAGUES):
+                continue
 
-                # 将比赛时间转为对象
-                match_dt = datetime.strptime(f"{m_date} {m_time}", "%Y-%m-%d %H:%M")
+            # 2. 去重逻辑
+            fid = row.get('data-fixtureid')
+            if not fid or fid in seen_ids:
+                continue # 如果 ID 已存在或为空，跳过此行
 
-                # --- 时间范围筛选逻辑 ---
-                if start_dt and end_dt:
-                    # 包含结束时间点
-                    if not (start_dt <= match_dt <= end_dt):
-                        continue
+            # 提取比赛日期和时间
+            m_date = row.get('data-matchdate')
+            m_time = row.get('data-matchtime')
+            if not m_date or not m_time: continue
 
-                fid = row.get('data-fixtureid')
-                # --- 去重逻辑 ---
-                if not fid or fid in seen_ids:
-                    continue # 如果 ID 已存在或为空，跳过此行
-                seen_ids.add(fid)
-              
-                league = row.get('data-simpleleague', '未知联赛')
-                home = row.get('data-homesxname', '未知主队')
-                away = row.get('data-awaysxname', '未知客队')
-                # m_time = f"{row.get('data-matchdate', '')} {row.get('data-matchtime', '')}"
+            # 将比赛时间转为对象
+            match_dt = datetime.strptime(f"{m_date} {m_time}", "%Y-%m-%d %H:%M")
 
-                print(f"正在获取: [{match_dt}] {home} VS {away} 的亚盘、大小球、欧赔信息")
-                # 调用单场处理函数
-                process_single_match(fid, league, home, away, match_dt.strftime('%Y-%m-%d %H:%M'), f)
-                count += 1
-                # 礼貌性停顿，防止被封 IP
-                time.sleep(random.uniform(1.0, 2.0))
+            # --- 时间范围筛选逻辑 ---
+            if start_dt and end_dt:
+                # 包含结束时间点
+                if not (start_dt <= match_dt <= end_dt):
+                    continue
+
+            seen_ids.add(fid)
+
+            home = row.get('data-homesxname', '未知主队')
+            away = row.get('data-awaysxname', '未知客队')
+            # m_time = f"{row.get('data-matchdate', '')} {row.get('data-matchtime', '')}"
+
+            print(f"正在获取: [{match_dt}] {home} VS {away} 的亚盘、大小球、欧赔信息")
+            # 调用单场处理函数
+            process_single_match(fid, league, home, away, match_dt.strftime('%Y-%m-%d %H:%M'), dir_name)
+            count += 1
+            # 礼貌性停顿，防止被封 IP
+            time.sleep(random.uniform(1.5, 3.0))
         
-        print(f"\n任务完成，共{count}场比赛，数据已保存至：{filename}")
+        print(f"\n任务完成！所有比赛已分类存入文件夹: {dir_name}")
 
     except Exception as e:
         print(f"[错误] 比赛数据获取程序意外中断: {e}")
