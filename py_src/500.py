@@ -10,6 +10,10 @@ from datetime import datetime
 import re # 用于清理非法文件名字符
 import os
 
+# --- 路径自适应配置 ---
+# 无论从哪里启动脚本，BASE_DIR 永远指向 500.py 所在的那个文件夹
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
 # 请求时的通用User_Agent
 USERAGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
 
@@ -209,7 +213,9 @@ def process_single_match(fid, league, home, away, m_time, folder_path):
     time_short = m_time.split(' ')[1].replace(':', '-')
     file_name = f"[{time_short}]{league}_{home}VS{away}.txt"
     file_name = sanitize_filename(file_name)
-    file_path = os.path.join(folder_path, file_name)
+    # 构造绝对路径文件夹
+    full_folder_path = os.path.join(BASE_DIR, folder_path)
+    file_path = os.path.join(full_folder_path, file_name)
 
     headers = {'User-Agent': USERAGENT}
     
@@ -320,9 +326,10 @@ def scrape_500_full_data(start_dt, end_dt):
         
         # --- 新增：创建本次运行的专属文件夹 ---
         dir_name = f"analysis_{time.strftime('%Y%m%d_%H%M%S')}"
-        if not os.path.exists(dir_name):
-            os.makedirs(dir_name)
-            print(f"已创建文件夹: {dir_name}")
+        full_folder_path = os.path.join(BASE_DIR, dir_name)
+        if not os.path.exists(full_folder_path):
+            os.makedirs(full_folder_path)
+            print(f"已创建文件夹: {full_folder_path}")
 
         seen_ids = set()
         count = 0
