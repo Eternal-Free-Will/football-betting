@@ -33,7 +33,11 @@ TARGET_COMPANIES = {
     "5": "澳门",
     "9": "易胜博",
     "3": "Bet365",
-    "1": "竞彩官方"
+    "1": "竞彩官方",
+    "651": "利己",
+    "18": "必发",
+    "4": "Interwetten",
+    "11": "Bwin"
 }
 
 def sanitize_filename(name):
