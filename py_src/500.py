@@ -11,7 +11,7 @@ import re # 用于清理非法文件名字符
 import os
 
 # --- 可方便获取历史数据或当日数据 ---
-BASE_URL = "https://trade.500.com/jczq/?date=2026-03-04"
+BASE_URL = "https://trade.500.com/jczq/"
 
 # --- 路径自适应配置 ---
 # 无论从哪里启动脚本，BASE_DIR 永远指向 500.py 所在的那个文件夹
@@ -21,8 +21,8 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 USERAGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/143.0.0.0 Safari/537.36"
 
 # 配置目标联赛名称
-TARGET_LEAGUES = ["英超", "英冠", "欧冠"]
-# TARGET_LEAGUES = []
+# TARGET_LEAGUES = ["英超", "英冠", "欧冠"]
+TARGET_LEAGUES = []
 
 # 配置目标机构 ID 和名称
 TARGET_COMPANIES = {
