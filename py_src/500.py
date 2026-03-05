@@ -10,6 +10,9 @@ from datetime import datetime
 import re # 用于清理非法文件名字符
 import os
 
+# --- 可方便获取历史数据或当日数据 ---
+BASE_URL = "https://trade.500.com/jczq/?date=2026-03-04"
+
 # --- 路径自适应配置 ---
 # 无论从哪里启动脚本，BASE_DIR 永远指向 500.py 所在的那个文件夹
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -19,6 +22,7 @@ USERAGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 
 
 # 配置目标联赛名称
 TARGET_LEAGUES = ["英超", "英冠", "欧冠"]
+# TARGET_LEAGUES = []
 
 # 配置目标机构 ID 和名称
 TARGET_COMPANIES = {
@@ -52,6 +56,87 @@ def parse_custom_time(time_str):
     except ValueError as e:
         print(f"时间格式错误: {time_str}，请确保格式为 YYYY-MM-DD 或 YYYY-MM-DD HH:MM")
         return None
+
+# 获取“让球指数”页面数据
+def get_rangqiu_detail(fid, comp_id, data_time, handicap_line, max_retries=15):
+    """
+    获取具体机构在特定让球数下的赔率变动
+    :param fid: 比赛 ID
+    :param comp_id: 机构 ID
+    :param data-time: 机构特定的更新时间
+    :param handicap_line: 让球数，如 -1, -2, 1
+    :param max_retries: 最大重试次数
+    """
+
+    t_ms = int(time.time() * 1000)
+    formatted_time = data_time.replace(' ', '+')
+    
+    # 构造让球盘专用的 Ajax URL
+    ajax_url = (f"https://odds.500.com/fenxi1/json/rspf.php?"
+                f"_={t_ms}&fid={fid}&cid={comp_id}&r=1&time={formatted_time}"
+                f"&handicapline={handicap_line}&type=rspf")
+    
+    headers = {
+        'User-Agent': USERAGENT,
+        'Referer': f'https://odds.500.com/fenxi/rangqiu-{fid}.shtml',
+        'X-Requested-With': 'XMLHttpRequest'
+    }
+
+    for i in range(max_retries):
+        try:
+            response = requests.get(ajax_url, headers=headers, timeout=5)
+            if response.status_code == 200:
+                data_list = response.json()
+                if data_list:
+                    details = []
+                    # 数据结构: [胜, 平, 负, 返还率, 更新时间, ...]
+                    for item in data_list:
+                        if len(item) >= 5:
+                            details.append(f"  [{item[4]}] 胜:{item[0]:<6} 平:{item[1]:<6} 负:{item[2]:<6} (让球:{handicap_line})")
+                    return details
+            print(f"  [ID:{comp_id}|让:{handicap_line}] 第 {i+1} 次获取为空，重试...")
+        except Exception as e:
+            print(f"  网络错误: {e}")
+        time.sleep(0.5 + random.random())
+    return []
+
+# 在 process_single_match 中增加的让球处理逻辑
+def handle_rangqiu_section(fid, f, headers):
+    f.write("\n【 让球指数变动（包含多重让球） 】\n")
+    rangqiu_url = f"https://odds.500.com/fenxi/rangqiu-{fid}.shtml"
+    try:
+        res = requests.get(rangqiu_url, headers=headers, timeout=5)
+        res.encoding = 'gbk'
+        soup = BeautifulSoup(res.text, 'lxml')
+        table = soup.find('table', id='datatb')
+        if table:
+            # 1. 扫描所有机构和对应的让球线
+            # 结构: {cid: {"name": "机构名", "time": "更新时间", "lines": set(让球数)}}
+            comp_map = {}
+            rows = table.find_all('tr', id=True)
+            for tr in rows:
+                # 优先获取 cid 属性，如果没有则获取 id 属性，最后进行清洗
+                raw_id = tr.get('cid') or tr.get('id') or ""
+                cid = raw_id.replace('tr_', '').replace('tr', '')
+                h_line = tr.get('handicapline') # 获取关键属性：让球数
+                d_time = tr.get('data-time')
+                
+                if cid in TARGET_COMPANIES and h_line:
+                    if cid not in comp_map:
+                        comp_map[cid] = {"time": d_time, "lines": set()}
+                    comp_map[cid]["lines"].add(h_line)
+
+            # 2. 遍历收集到的机构和线路进行抓取
+            for cid, info in comp_map.items():
+                f.write(f"  机构: {TARGET_COMPANIES[cid]}\n")
+                for line in sorted(info["lines"]): # 排序让球数，例如 -2, -1
+                    history = get_rangqiu_detail(fid, cid, info["time"], line)
+                    f.write("\n".join(history) + "\n" if history else "    (多次尝试该机构暂无让球历史变动数据)\n")
+                f.write("  " + "-"*50 + "\n")
+        else:
+            f.write("  未在页面找到让球数据表 table#datatb\n")
+    except Exception as e:
+        f.write(f"  让球指数页面访问异常: {e}\n")
 
 # 获取“亚盘对比”页面数据
 def get_yazhi_detail(fid, comp_id, max_retries=15):
@@ -199,7 +284,7 @@ def get_ouzhi_detail(fid, comp_id, data_time, max_retries=15):
 
     return [] # 超过最大重试次数依然无果，返回空
 
-# 获取单场比赛“亚盘、大小球、欧赔”维度数据
+# 获取单场比赛“亚盘、大小球、让球、欧赔”维度数据
 def process_single_match(fid, league, home, away, m_time, folder_path):
     """
     :param fid: 比赛 ID
@@ -269,7 +354,10 @@ def process_single_match(fid, league, home, away, m_time, folder_path):
         except Exception as e:
             f.write(f"  大小指数页面访问异常: {e}\n")
         
-        # --- 第三部分：处理欧赔 ---
+        # --- 第三部分：处理让球 ---
+        handle_rangqiu_section(fid, f, headers)
+
+        # --- 第四部分：处理欧赔 ---
         f.write("\n【 欧赔指数变动 】\n")
         ouzhi_url = f"https://odds.500.com/fenxi/ouzhi-{fid}.shtml"
         try:
@@ -303,19 +391,18 @@ def process_single_match(fid, league, home, away, m_time, folder_path):
         f.write("\n\n")
     print(f"  [完成] 数据已存至: {file_name}")
 
-# 获取所有比赛的“亚盘、大小球、欧赔”数据
+# 获取所有比赛的“亚盘、大小球、让球、欧赔”数据
 def scrape_500_full_data(start_dt, end_dt):
     """
     根据时间范围对比赛进行筛选
     :param start_dt: 范围起始时间
     :param end_dt: 范围结束时间
     """
-    base_url = "https://trade.500.com/jczq/"
     headers = {'User-Agent': USERAGENT}
     
     try:
         print(f"[{datetime.now().strftime('%H:%M:%S')}] 正在连接 500.com 赛事列表...")
-        res = requests.get(base_url, headers=headers, timeout=10)
+        res = requests.get(BASE_URL, headers=headers, timeout=10)
         res.encoding = 'gbk'
         soup = BeautifulSoup(res.text, 'lxml')
         match_rows = soup.select('table.bet-tb-dg tr.bet-tb-tr')
@@ -365,7 +452,7 @@ def scrape_500_full_data(start_dt, end_dt):
             away = row.get('data-awaysxname', '未知客队')
             # m_time = f"{row.get('data-matchdate', '')} {row.get('data-matchtime', '')}"
 
-            print(f"正在获取: [{match_dt}] {home} VS {away} 的亚盘、大小球、欧赔信息")
+            print(f"正在获取: [{match_dt}] {home} VS {away} 的亚盘、大小球、让球、欧赔信息")
             # 调用单场处理函数
             process_single_match(fid, league, home, away, match_dt.strftime('%Y-%m-%d %H:%M'), dir_name)
             count += 1
