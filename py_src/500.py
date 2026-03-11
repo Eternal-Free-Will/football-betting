@@ -66,8 +66,16 @@ def parse_custom_time(time_str):
 # 通用清理函数：剔除 style='display: none' 的标签
 def clean_hidden_tags(element):
     if element:
-        for hidden in element.find_all(style=lambda s: s and 'display: none' in s):
+        # 1. 剔除 style 包含 display:none 的
+        pattern = re.compile(r'display\s*:\s*none', re.IGNORECASE)
+        for hidden in element.find_all(style=pattern):
             hidden.decompose()
+            
+        # 2. 500网常用的隐藏类名（根据实际源码调整）
+        # 比如有的排名虽然没写 style，但它是 hidden 类
+        for hidden in element.find_all(class_='gray'): 
+             # 注意：只有当你确定 gray 类全是你想删的内容时才这么做
+             hidden.decompose()
     return element
 
 # 1. 获取赛事轮次、排名及比分信息
@@ -89,7 +97,7 @@ def get_league_round_info(soup):
 
     score_p = tds[2].find('p', class_='odds_hd_bf')
     if score_p and score_p.find('strong'):
-        txt = score_p.find('strong').get_text(strip=True)
+        txt = score_p.find('strong').get_text(strip=True).replace(" ", "")
         # 提取 strong 标签内的文本，可能是 "VS" 或 "2:1"
         results["current_score"] = "" if txt.upper() == "VS" else txt
 
@@ -176,7 +184,7 @@ def get_pre_match_rank(soup):
             # tds[6]=失, tds[7]=净, tds[8]=积分, tds[9]=排名, tds[10]=胜率
             row_data = []
             for i in range(1, 11):
-                val = tds[i].get_text(strip=True)
+                val = tds[i].get_text(strip=True).replace(" ", "")
                 row_data.append(val)
             
             results[key][row_key] = row_data
@@ -202,7 +210,7 @@ def get_battle_history(soup):
         rows = table.find_all('tr', class_=lambda x: x in ['tr1', 'tr2'])
         for row in rows:
             # 预先移除所有 style="display: none;" 的标签（如赛前排名 [20]）
-            clean_hidden_tags(row)
+            row = clean_hidden_tags(row)
 
             tds = row.find_all('td')
             # 联赛、日期、对阵(主队 比分 客队)、半场、赛果、欧指(胜/平/负)、亚指(水位 盘口 水位)、盘路(赢/输/走)、大小(大/小)
@@ -210,11 +218,11 @@ def get_battle_history(soup):
                 results["records"].append([
                     tds[0].get_text(strip=True),
                     tds[1].get_text(strip=True),
-                    tds[2].get_text(" ", strip=True).replace(" : ", ":"),
-                    tds[3].get_text(strip=True),
+                    tds[2].get_text(strip=True).replace(" : ", ":"),
+                    tds[3].get_text(strip=True).replace(" : ", ":"),
                     tds[4].get_text(strip=True),
                     tds[5].get_text("/", strip=True),
-                    tds[6].get_text(" ", strip=True),
+                    tds[6].get_text(strip=True),
                     tds[7].get_text(strip=True),
                     tds[8].get_text(strip=True)])
 
@@ -240,7 +248,7 @@ def get_recent_10_records(soup):
         rows = table.find_all('tr', class_=lambda x: x in ['tr1', 'tr2'])
         for row in rows:
             # 预处理：剔除所有 style="display: none;" 的标签（如赛前排名 [11]）
-            clean_hidden_tags(row)
+            row = clean_hidden_tags(row)
 
             # --- 2. 区分【统计行】与【比赛记录行】 ---
             # 比赛记录行带有 fid 属性，统计行没有
@@ -254,11 +262,11 @@ def get_recent_10_records(soup):
                     results[key]["records"].append([
                         tds[0].get_text(strip=True),
                         tds[1].get_text(strip=True),
-                        tds[2].get_text(" ", strip=True).replace(" : ", ":"),
-                        tds[3].get_text(strip=True),
+                        tds[2].get_text(strip=True).replace(" : ", ":"),
+                        tds[3].get_text(strip=True).replace(" : ", ":"),
                         tds[4].get_text(strip=True),
                         tds[5].get_text("/", strip=True), # 欧指使用/分隔（如 2.2/3.15/2.84）
-                        tds[6].get_text(" ", strip=True), # 亚指使用空格分隔（如 0.88 平手/半球 0.96）
+                        tds[6].get_text(strip=True),
                         tds[7].get_text(strip=True),
                         tds[8].get_text(strip=True)])
     return results
@@ -283,7 +291,7 @@ def get_venue_records(soup):
         # --- 1. 提取底部概览统计信息 ---
         bottom_info = container.find('div', class_='bottom_info')
         if bottom_info:
-            results[key]["summary"] = bottom_info.get_text(" ", strip=True)
+            results[key]["summary"] = bottom_info.find('p').get_text(" ", strip=True)
         
         # --- 2. 提取表格详细比赛记录 ---
         table = container.find('table', class_='pub_table')
@@ -292,12 +300,12 @@ def get_venue_records(soup):
         # 过滤行：只需要 tr1 和 tr2，排除 tr3 和表头
         rows = table.find_all('tr', class_=lambda x: x in ['tr1', 'tr2'])
         for row in rows:
-            clean_hidden_tags(row)
+            row = clean_hidden_tags(row)
             tds = row.find_all('td')
 
             # 此类表格固定为 8 个 td：赛事、比赛日期、对阵(主队 比分 客队)、盘口、半场、赛果、盘路、大小
             if len(tds) >= 8:
-                results[key]["records"].append([td.get_text(" ", strip=True).replace(" : ", ":") for td in tds])
+                results[key]["records"].append([td.get_text(strip=True).replace(" : ", ":") for td in tds])
     return results
 
 # 6. 获取未来赛事数据
@@ -368,65 +376,83 @@ def handle_data_analysis_section(fid, f, headers):
         # 内部辅助函数简化代码
         def write_rank_row(title, data_list):
             if data_list:
-                f.write(f"  {title}: 比赛{data_list[0]:<4}场, 胜{data_list[1]:<4}场, 平{data_list[2]:<4}场, 负{data_list[3]:<4}场, 进球{data_list[4]:<4}, 失球{data_list[5]:<4}, 净胜球{data_list[6]:<4}, 积分{data_list[7]:<4}, 排名{data_list[8]:<4}, 胜率{data_list[9]:<4}\n")
-        if p_m_rank['home_rank']['total']:
+                f.write(f"  {title+'：':\u3000<4} 比赛{data_list[0]+'场':\u3000<6} 胜{data_list[1]+'场':\u3000<6} 平{data_list[2]+'场':\u3000<6} 负{data_list[3]+'场':\u3000<4} 进球{data_list[4]:<4} 失球{data_list[5]:<4} 净胜球{data_list[6]:<4} 积分{data_list[7]:<4} 排名{data_list[8]:<4} 胜率{data_list[9]:<4}\n")
+        if p_m_rank['home_rank']['total'][0]:
             f.write("  主队数据：\n")
             write_rank_row("总成绩", p_m_rank['home_rank']['total'])
-            write_rank_row("主场  ", p_m_rank['home_rank']['home'])
-            write_rank_row("客场  ", p_m_rank['home_rank']['away'])
+            write_rank_row("主场", p_m_rank['home_rank']['home'])
+            write_rank_row("客场", p_m_rank['home_rank']['away'])
         else: 
             f.write("  主队数据：暂无\n")
 
-        if p_m_rank['away_rank']['total']:
+        if p_m_rank['away_rank']['total'][0]:
             f.write("  客队数据：\n")
             write_rank_row("总成绩", p_m_rank['away_rank']['total'])
-            write_rank_row("主场  ", p_m_rank['away_rank']['home'])
-            write_rank_row("客场  ", p_m_rank['away_rank']['away'])
+            write_rank_row("主场", p_m_rank['away_rank']['home'])
+            write_rank_row("客场", p_m_rank['away_rank']['away'])
         else:
             f.write("  客队数据：暂无\n")
         f.write("  " + "-"*50 + "\n")
 
         # 3. 获取两队交战历史数据
         b_h = get_battle_history(soup)
-        f.write("\n  两队交战历史数据：\n")
-        f.write(f"  数据概览：{b_h['summary']}\n")
-        # 联赛、日期、对阵(主队 比分 客队)、半场、赛果、欧指(胜/平/负)、亚指(水位 盘口 水位)、盘路(赢/输/走)、大小(大/小)
-        for r in b_h['records']:
-            f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} 半场{r[3].replace(' ', ''):<6} {r[4]+'(赛果)':\u3000<6} {r[5]+'(平均欧赔)':\u3000:<22} {r[6]+'(盘口)':\u3000<20} {r[7]+'(盘路)':\u3000<6} {r[8]+'(大小)':\u3000<6}\n")
+        if len(b_h['records']): 
+            f.write("\n  两队交战历史数据：\n")
+
+            f.write(f"  数据概览：{b_h['summary']}\n")
+            # 联赛、日期、对阵(主队 比分 客队)、半场、赛果、欧指(胜/平/负)、亚指(水位 盘口 水位)、盘路(赢/输/走)、大小(大/小)
+            for r in b_h['records']:
+                f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} 半场{r[3]:<6} {r[4]+'(赛果)':\u3000<6} {r[5]+'(平均欧赔)':\u3000<22} {r[6]+'(盘口)':\u3000<20} {r[7]+'(盘路)':\u3000<6} {r[8]+'(大小)':\u3000<6}\n")
+        else:
+            f.write("\n  两队交战历史数据：暂无\n")
         f.write("  " + "-"*50 + "\n")
 
         # 4. 获取主客队近期10场比赛记录及统计概览
         r_10 = get_recent_10_records(soup)
         f.write("\n  主客队近期10场比赛记录及统计概览：\n")        
-        f.write(f"  主队近期10场比赛记录：\n")
-        f.write(f"  数据概览：{r_10['home']['summary']}\n")
-        f.write("  数据详情：\n")
-        # 赛事、比赛日期、主队 比分 客队、半场、赛果、欧指、亚指、盘路、大小
-        for r in r_10['home']['records']:
-            f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} 半场{r[3].replace(' ', ''):<6} {r[4]+'(赛果)':\u3000<6} {r[5]+'(平均欧赔)':\u3000:<22} {r[6]+'(盘口)':\u3000<20} {r[7]+'(盘路)':\u3000<6} {r[8]+'(大小)':\u3000<6}\n")
-        f.write(f"  客队近期10场比赛记录：\n")
-        f.write(f"  数据概览：{r_10['away']['summary']}\n")
-        f.write("  数据详情：\n")
-        for r in r_10['away']['records']:
-            f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} 半场{r[3].replace(' ', ''):<6} {r[4]+'(赛果)':\u3000<6} {r[5]+'(平均欧赔)':\u3000:<22} {r[6]+'(盘口)':\u3000<20} {r[7]+'(盘路)':\u3000<6} {r[8]+'(大小)':\u3000<6}\n")
+        if len(r_10['home']['records']):
+            f.write(f"  主队近期10场比赛记录：\n")
+            f.write(f"  数据概览：{r_10['home']['summary']}\n")
+            f.write("  数据详情：\n")
+            # 赛事、比赛日期、主队 比分 客队、半场、赛果、欧指、亚指、盘路、大小
+            for r in r_10['home']['records']:
+                f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} 半场{r[3]:<6} {r[4]+'(赛果)':\u3000<6} {r[5]+'(平均欧赔)':\u3000<22} {r[6]+'(盘口)':\u3000<20} {r[7]+'(盘路)':\u3000<6} {r[8]+'(大小)':\u3000<6}\n")
+        else:
+            f.write(f"  主队近期10场比赛记录：暂无\n")
+        
+        if len(r_10['away']['records']):
+            f.write(f"  客队近期10场比赛记录：\n")
+            f.write(f"  数据概览：{r_10['away']['summary']}\n")
+            f.write("  数据详情：\n")
+            for r in r_10['away']['records']:
+                f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} 半场{r[3]:<6} {r[4]+'(赛果)':\u3000<6} {r[5]+'(平均欧赔)':\u3000<22} {r[6]+'(盘口)':\u3000<20} {r[7]+'(盘路)':\u3000<6} {r[8]+'(大小)':\u3000<6}\n")
+        else:
+            f.write(f"  客队近期10场比赛记录：暂无\n")
         f.write("  " + "-"*50 + "\n")
 
         # 5. 获取主队在主场、客队在客场的近期比赛数据
+        f.write("\n  主队在主场、客队在客场的近期比赛数据：\n")
         v_r = get_venue_records(soup)
-        f.write("\n  主队在主场、客队在客场的近期比赛数据：\n")        
-        f.write(f"  主队在主场近期比赛记录：\n")
-        f.write(f"  数据概览：{v_r['home_at_home']['summary']}\n")
-        f.write("  数据详情：\n")
-        # 赛事、比赛日期、对阵(主队 比分 客队)、盘口、半场、赛果、盘路、大小
-        for r in v_r['home_at_home']['records']:
-            f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} {r[3]+'(盘口)':\u3000<10} 半场{r[4].replace(' ', ''):<6} {r[5]+'(赛果)':\u3000<6} {r[6]+'(盘路)':\u3000<6} {r[7]+'(大小)':\u3000<6}\n")
+        if len(v_r['home_at_home']['records']):
+            f.write(f"  主队在主场近期比赛记录：\n")
+            f.write(f"  数据概览：{v_r['home_at_home']['summary']}\n")
+            f.write("  数据详情：\n")
+            # 赛事、比赛日期、对阵(主队 比分 客队)、盘口、半场、赛果、盘路、大小
+            for r in v_r['home_at_home']['records']:
+                f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} {r[3]+'(盘口)':\u3000<10} 半场{r[4]:<6} {r[5]+'(赛果)':\u3000<6} {r[6]+'(盘路)':\u3000<6} {r[7]+'(大小)':\u3000<6}\n")
+        else:
+            f.write(f"  主队在主场近期比赛记录：暂无\n")
         
-        f.write(f"  客队在客场近期比赛记录：\n")
-        f.write(f"  数据概览：{v_r['away_at_away']['summary']}\n")
-        f.write("  数据详情：\n")
-        # 赛事、比赛日期、对阵(主队 比分 客队)、盘口、半场、赛果、盘路、大小
-        for r in v_r['away_at_away']['records']:
-            f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} {r[3]+'(盘口)':\u3000<10} 半场{r[4]:<6} {r[5]+'(赛果)':\u3000<6} {r[6]+'(盘路)':\u3000<6} {r[7]+'(大小)':\u3000<6}\n")
+        if len(v_r['away_at_away']['records']):
+            f.write(f"  客队在客场近期比赛记录：\n")
+            f.write(f"  数据概览：{v_r['away_at_away']['summary']}\n")
+            f.write("  数据详情：\n")
+            # 赛事、比赛日期、对阵(主队 比分 客队)、盘口、半场、赛果、盘路、大小
+            for r in v_r['away_at_away']['records']:
+                f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} {r[3]+'(盘口)':\u3000<10} 半场{r[4]:<6} {r[5]+'(赛果)':\u3000<6} {r[6]+'(盘路)':\u3000<6} {r[7]+'(大小)':\u3000<6}\n")
+        else:
+            f.write(f"  客队在主场近期比赛记录：暂无\n")
+        f.write("  " + "-"*50 + "\n")
 
         # 6. 获取未来赛事数据
         f_m = get_future_matches(soup)
