@@ -1,5 +1,14 @@
 # Football Betting
 
+- [WhoScored获取预计阵型](https://www.whoscored.com/)
+- [Transfermarkt获取关键缺阵](https://www.transfermarkt.com/ticker/index/live)
+
+```
+预计阵型
+关键缺阵
+阵容稳定度（AI判断）
+```
+
 一、需要准备这 4 大类数据（核心）
 ====================
 
