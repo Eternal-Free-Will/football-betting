@@ -27,17 +27,14 @@ TARGET_LEAGUES = []
 # 配置目标机构 ID 和名称
 TARGET_COMPANIES = {
     "1055": "平博",
+    "3": "Bet365",
     "280": "皇冠",
+    "5": "澳门",
     "293": "威廉希尔",
     "2": "立博",
-    "5": "澳门",
-    "9": "易胜博",
-    "3": "Bet365",
+    "4": "Interwetten",
     "1": "竞彩官方",
     "651": "利记",
-    "18": "必发",
-    "4": "Interwetten",
-    "11": "Bwin"
 }
 
 def sanitize_filename(name):
@@ -115,8 +112,10 @@ def get_league_round_info(soup):
                 this_season = span_red.get_text(strip=True)
             # 2. 提取上赛季联赛名称和排名数字
             li_text = rank_li.get_text()
+            # 哪怕没有“赛前排名”，split 也会返回原字符串
+            last_season_part = li_text.split("赛前排名")[0]
             # match.group(1) 是联赛名，match.group(2) 是排名数字
-            last_match = re.search(r'上赛季(.*?)排名:\s*(\d+)', li_text)
+            last_match = re.search(r'上赛季(.*?)排名:\s*(\d+)', last_season_part)
             if last_match: 
                 last_season_league, last_season_num = last_match.group(1).strip(), last_match.group(2)
 
@@ -464,14 +463,14 @@ def handle_data_analysis_section(fid, f, headers):
             for r in f_m['home']:
                 f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<12} 距离天数{r[3]:<4}\n")
         else:
-            f.write("  主队未来暂无赛事！")
+            f.write("  主队未来暂无赛事！\n")
         
         f.write(f"  客队未来赛事：\n")
         if f_m['away']:
             for r in f_m['away']:
                 f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<12} 距离天数{r[3]:<4}\n")
         else:
-            f.write("  客队未来暂无赛事！")
+            f.write("  客队未来暂无赛事！\n")
         f.write("  " + "-"*50 + "\n")
 
     except Exception as e:
@@ -514,7 +513,7 @@ def get_rangqiu_detail(fid, comp_id, data_time, handicap_line, max_retries=15):
                     # 数据结构: [胜, 平, 负, 返还率, 更新时间, ...]
                     for item in data_list:
                         if len(item) >= 5:
-                            details.append(f"  [{item[4]}] 胜:{item[0]:<6} 平:{item[1]:<6} 负:{item[2]:<6} (让球:{handicap_line})")
+                            details.append(f"  [{item[4]}] 让球:{handicap_line:<4} 胜:{item[0]:<6} 平:{item[1]:<6} 负:{item[2]:<6}")
                     return details
             print(f"  [ID:{comp_id}|让:{handicap_line}] 第 {i+1} 次获取为空，重试...")
         except Exception as e:
@@ -718,22 +717,47 @@ def process_single_match(fid, league, home, away, m_time, folder_path):
     """
     # 构造专属文件名：[18-30]英超_阿森纳VS曼联.txt (取时间的分秒部分)
     time_short = m_time.split(' ')[1].replace(':', '-')
-    file_name = f"[{time_short}]{league}_{home}VS{away}.txt"
-    file_name = sanitize_filename(file_name)
     # 构造绝对路径文件夹
     full_folder_path = os.path.join(BASE_DIR, folder_path)
-    file_path = os.path.join(full_folder_path, file_name)
+    
+    file_name_h = f"[{time_short}]{league}_{home}VS{away}_历史数据.txt"
+    file_name_h = sanitize_filename(file_name_h)
+    file_path_h = os.path.join(full_folder_path, file_name_h)
+
+    file_name_y = f"[{time_short}]{league}_{home}VS{away}_亚盘.txt"
+    file_name_y = sanitize_filename(file_name_y)
+    file_path_y = os.path.join(full_folder_path, file_name_y)
+
+    file_name_o = f"[{time_short}]{league}_{home}VS{away}_欧赔.txt"
+    file_name_o = sanitize_filename(file_name_o)
+    file_path_o = os.path.join(full_folder_path, file_name_o)
+
+    file_name_s = f"[{time_short}]{league}_{home}VS{away}_大小球.txt"
+    file_name_s = sanitize_filename(file_name_s)
+    file_path_s = os.path.join(full_folder_path, file_name_s)
+
+    file_name_r = f"[{time_short}]{league}_{home}VS{away}_让球.txt"
+    file_name_r = sanitize_filename(file_name_r)
+    file_path_r = os.path.join(full_folder_path, file_name_r)
 
     headers = {'User-Agent': USERAGENT}
     
-    # 使用 'w' 模式写入新文件
-    with open(file_path, 'w', encoding='utf-8') as f:
+    # 写入历史数据文件
+    with open(file_path_h, 'w', encoding='utf-8') as f:
         f.write(f"{'='*60}\n")
         f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away} | ID: {fid}\n")
         f.write(f"{'='*60}\n")
 
         # --- 第零部分：数据分析 ---
         handle_data_analysis_section(fid, f, headers)
+        f.write("\n\n")
+        print(f"  [完成] 数据已存至: {file_path_h}")
+
+    # 写入亚盘文件
+    with open(file_path_y, 'w', encoding='utf-8') as f:
+        f.write(f"{'='*60}\n")
+        f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away} | ID: {fid}\n")
+        f.write(f"{'='*60}\n")
 
         # --- 第一部分：处理亚盘 ---
         f.write("\n【 亚盘指数变动 】\n")
@@ -756,31 +780,15 @@ def process_single_match(fid, league, home, away, m_time, folder_path):
                 f.write("  未在页面找到亚盘盘口数据表 table#datatb\n")
         except Exception as e:
             f.write(f"  亚盘对比页面访问异常: {e}\n")
-
-        # --- 第二部分：处理大小球 ---
-        f.write("\n【 大小球指数变动 】\n")
-        daxiao_url = f"https://odds.500.com/fenxi/daxiao-{fid}.shtml"
-        try:
-            d_res = requests.get(daxiao_url, headers=headers, timeout=5)
-            d_res.encoding = 'gbk'
-            d_soup = BeautifulSoup(d_res.text, 'lxml')
-            d_table = d_soup.find('table', id='datatb')
-            if d_table:
-                rows = d_table.find_all('tr', id=True)
-                for tr in rows:
-                    cid = tr.get('id')
-                    if cid in TARGET_COMPANIES:
-                        f.write(f"  机构: {TARGET_COMPANIES[cid]}\n")
-                        history = get_daxiao_detail(fid, cid)
-                        f.write("\n".join(history) + "\n" if history else "    (多次尝试该机构暂无大小球盘历史变动数据)\n")
-                        f.write("  " + "-"*50 + "\n")
-            else:
-                f.write("  未在页面找到大小球盘口数据表 table#datatb\n")
-        except Exception as e:
-            f.write(f"  大小指数页面访问异常: {e}\n")
         
-        # --- 第三部分：处理让球 ---
-        handle_rangqiu_section(fid, f, headers)
+        f.write("\n\n")
+        print(f"  [完成] 数据已存至: {file_name_y}")
+    
+    # 写入欧赔文件
+    with open(file_path_o, 'w', encoding='utf-8') as f:
+        f.write(f"{'='*60}\n")
+        f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away} | ID: {fid}\n")
+        f.write(f"{'='*60}\n")
 
         # --- 第四部分：处理欧赔 ---
         f.write("\n【 欧赔指数变动 】\n")
@@ -814,7 +822,51 @@ def process_single_match(fid, league, home, away, m_time, folder_path):
             f.write(f"  百家欧赔页面访问异常: {e}\n")
         
         f.write("\n\n")
-    print(f"  [完成] 数据已存至: {file_name}")
+        print(f"  [完成] 数据已存至: {file_name_o}")
+   
+    # 写入大小球文件
+    with open(file_path_s, 'w', encoding='utf-8') as f:
+        f.write(f"{'='*60}\n")
+        f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away} | ID: {fid}\n")
+        f.write(f"{'='*60}\n")
+
+        # --- 第二部分：处理大小球 ---
+        f.write("\n【 大小球指数变动 】\n")
+        daxiao_url = f"https://odds.500.com/fenxi/daxiao-{fid}.shtml"
+        try:
+            d_res = requests.get(daxiao_url, headers=headers, timeout=5)
+            d_res.encoding = 'gbk'
+            d_soup = BeautifulSoup(d_res.text, 'lxml')
+            d_table = d_soup.find('table', id='datatb')
+            if d_table:
+                rows = d_table.find_all('tr', id=True)
+                for tr in rows:
+                    cid = tr.get('id')
+                    if cid in TARGET_COMPANIES:
+                        f.write(f"  机构: {TARGET_COMPANIES[cid]}\n")
+                        history = get_daxiao_detail(fid, cid)
+                        f.write("\n".join(history) + "\n" if history else "    (多次尝试该机构暂无大小球盘历史变动数据)\n")
+                        f.write("  " + "-"*50 + "\n")
+            else:
+                f.write("  未在页面找到大小球盘口数据表 table#datatb\n")
+        except Exception as e:
+            f.write(f"  大小指数页面访问异常: {e}\n")
+        
+        # --- 第三部分：处理让球 ---
+        handle_rangqiu_section(fid, f, headers)
+        f.write("\n\n")
+        print(f"  [完成] 数据已存至: {file_name_s}")
+
+    # 写入让球文件
+    with open(file_path_r, 'w', encoding='utf-8') as f:
+        f.write(f"{'='*60}\n")
+        f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away} | ID: {fid}\n")
+        f.write(f"{'='*60}\n")
+
+        # --- 第三部分：处理让球 ---
+        handle_rangqiu_section(fid, f, headers)
+        f.write("\n\n")
+        print(f"  [完成] 数据已存至: {file_name_r}")
 
 # 获取所有比赛的“亚盘、大小球、让球、欧赔”数据
 def scrape_500_full_data(start_dt, end_dt):
