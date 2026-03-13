@@ -37,6 +37,25 @@ TARGET_COMPANIES = {
     "651": "利记",
 }
 
+# 专门处理竞彩让球格式
+def format_handicap(hc):
+    """
+    专门处理竞彩让球格式：
+    1  -> +1
+    -1 -> -1
+    0  -> 0
+    """
+    try:
+        # 先转换为整数（竞彩让球通常是整数）
+        val = int(float(hc)) 
+        if val > 0:
+            return f"+{val}"
+        else:
+            # 负数自带负号，0直接返回字符串
+            return str(val)
+    except (ValueError, TypeError):
+        return str(hc) # 如果抓到的是非数字，原样返回
+
 def sanitize_filename(name):
     """
     清理文件名中的非法字符，防止报错
@@ -513,9 +532,9 @@ def get_rangqiu_detail(fid, comp_id, data_time, handicap_line, max_retries=15):
                     # 数据结构: [胜, 平, 负, 返还率, 更新时间, ...]
                     for item in data_list:
                         if len(item) >= 5:
-                            details.append(f"  [{item[4]}] 让球:{handicap_line:<4} 胜:{item[0]:<6} 平:{item[1]:<6} 负:{item[2]:<6}")
+                            details.append(f"  [{item[4]}] 让球:{format_handicap(handicap_line):<4} 胜:{item[0]:<6} 平:{item[1]:<6} 负:{item[2]:<6}")
                     return details
-            print(f"  [ID:{comp_id}|让:{handicap_line}] 第 {i+1} 次获取为空，重试...")
+            print(f"  [ID:{comp_id}|让:{format_handicap(handicap_line)}] 第 {i+1} 次获取为空，重试...")
         except Exception as e:
             print(f"  网络错误: {e}")
         time.sleep(0.5 + random.random())
@@ -718,7 +737,7 @@ def process_single_match(fid, league, home, away, m_time, folder_path):
     # 构造专属文件名：[18-30]英超_阿森纳VS曼联.txt (取时间的分秒部分)
     time_short = m_time.split(' ')[1].replace(':', '-')
     # 构造绝对路径文件夹
-    full_folder_path = os.path.join(BASE_DIR, folder_path)
+    full_folder_path = os.path.join(BASE_DIR, folder_path, f"[{time_short}]{league}_{home}VS{away}")
     
     file_name_h = f"[{time_short}]{league}_{home}VS{away}_历史数据.txt"
     file_name_h = sanitize_filename(file_name_h)
@@ -898,45 +917,62 @@ def scrape_500_full_data(start_dt, end_dt):
         seen_ids = set()
         count = 0
 
-        for row in match_rows:
-            # 1. 提取联赛名并过滤 (增加 strip 防止空格干扰)
-            league = row.get('data-simpleleague', '未知联赛').strip()
-            if TARGET_LEAGUES and not any(name in league for name in TARGET_LEAGUES):
-                continue
-
-            # 2. 去重逻辑
-            fid = row.get('data-fixtureid')
-            if not fid or fid in seen_ids:
-                continue # 如果 ID 已存在或为空，跳过此行
-
-            # 提取比赛日期和时间
-            m_date = row.get('data-matchdate')
-            m_time = row.get('data-matchtime')
-            if not m_date or not m_time: continue
-
-            # 将比赛时间转为对象
-            match_dt = datetime.strptime(f"{m_date} {m_time}", "%Y-%m-%d %H:%M")
-
-            # --- 时间范围筛选逻辑 ---
-            if start_dt and end_dt:
-                # 包含结束时间点
-                if not (start_dt <= match_dt <= end_dt):
+        file_path_all = os.path.join(BASE_DIR, dir_name, '全部赛事信息.txt')
+        with open(file_path_all, 'w', encoding='utf-8') as f:
+            for row in match_rows:
+                # 1. 提取联赛名并过滤 (增加 strip 防止空格干扰)
+                league = row.get('data-simpleleague', '未知联赛').strip()
+                if TARGET_LEAGUES and not any(name in league for name in TARGET_LEAGUES):
                     continue
 
-            seen_ids.add(fid)
+                # 2. 去重逻辑
+                fid = row.get('data-fixtureid')
+                if not fid or fid in seen_ids:
+                    continue # 如果 ID 已存在或为空，跳过此行
 
-            home = row.get('data-homesxname', '未知主队')
-            away = row.get('data-awaysxname', '未知客队')
-            # m_time = f"{row.get('data-matchdate', '')} {row.get('data-matchtime', '')}"
+                # 提取比赛日期和时间
+                m_date = row.get('data-matchdate')
+                m_time = row.get('data-matchtime')
+                if not m_date or not m_time: continue
 
-            print(f"正在获取: [{match_dt}] {home} VS {away} 的亚盘、大小球、让球、欧赔信息")
-            # 调用单场处理函数
-            process_single_match(fid, league, home, away, match_dt.strftime('%Y-%m-%d %H:%M'), dir_name)
-            count += 1
-            # 礼貌性停顿，防止被封 IP
-            time.sleep(random.uniform(1.5, 3.0))
-        
-        print(f"\n任务完成！所有比赛已分类存入文件夹: {dir_name}")
+                # 将比赛时间转为对象
+                match_dt = datetime.strptime(f"{m_date} {m_time}", "%Y-%m-%d %H:%M")
+
+                # --- 时间范围筛选逻辑 ---
+                if start_dt and end_dt:
+                    # 包含结束时间点
+                    if not (start_dt <= match_dt <= end_dt):
+                        continue
+
+                seen_ids.add(fid)
+
+                home = row.get('data-homesxname', '未知主队')
+                away = row.get('data-awaysxname', '未知客队')
+                # m_time = f"{row.get('data-matchdate', '')} {row.get('data-matchtime', '')}"
+
+                f.write(f"{'='*60}\n")
+                f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away} | ID: {fid}\n")
+                f.write(f"{'='*60}\n")
+                f.write("Whoscored赛事网址：\n")
+                f.write("Whoscored预计阵容：\n")
+                f.write("主队阵容：\n")
+                f.write("客队阵容：\n")
+                f.write("Transfermarkt赛事网址：\n")
+                f.write("Transfermarkt伤停信息：\n")
+                f.write("主队伤停：\n")
+                f.write("客队伤停：\n")
+                f.write("-"*80 + "\n")
+                f.write("\n\n")
+
+                print(f"正在获取: [{match_dt}] {home} VS {away} 的亚盘、大小球、让球、欧赔信息")
+                # 调用单场处理函数
+                process_single_match(fid, league, home, away, match_dt.strftime('%Y-%m-%d %H:%M'), dir_name)
+                count += 1
+                # 礼貌性停顿，防止被封 IP
+                time.sleep(random.uniform(1.5, 3.0))
+            
+            print(f"\n任务完成！所有比赛已分类存入文件夹: {dir_name}")
+        print(f"\n所有比赛信息已写入全部赛事信息.txt")
 
     except Exception as e:
         print(f"[错误] 比赛数据获取程序意外中断: {e}")
