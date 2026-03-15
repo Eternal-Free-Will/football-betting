@@ -738,6 +738,10 @@ def process_single_match(fid, league, home, away, m_time, folder_path):
     time_short = m_time.split(' ')[1].replace(':', '-')
     # 构造绝对路径文件夹
     full_folder_path = os.path.join(BASE_DIR, folder_path, f"[{time_short}]{league}_{home}VS{away}")
+
+    if not os.path.exists(full_folder_path):
+        os.makedirs(full_folder_path)
+        print(f"已创建文件夹: {full_folder_path}")
     
     file_name_h = f"[{time_short}]{league}_{home}VS{away}_历史数据.txt"
     file_name_h = sanitize_filename(file_name_h)
