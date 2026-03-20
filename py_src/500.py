@@ -549,7 +549,7 @@ def get_rangqiu_detail(fid, comp_id, data_time, handicap_line, max_retries=15):
 
 # 在 process_single_match 中增加的让球处理逻辑
 def handle_rangqiu_section(fid, f, headers):
-    f.write("\n【 让球指数变动（包含多重让球） 】\n")
+    f.write("\n【 竞足让球变动（包含多重让球） 】\n")
     rangqiu_url = f"https://odds.500.com/fenxi/rangqiu-{fid}.shtml"
     try:
         res = requests.get(rangqiu_url, headers=headers, timeout=5)
