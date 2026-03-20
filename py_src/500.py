@@ -373,7 +373,6 @@ def handle_data_analysis_section(fid, f, headers):
 
         # 1. 获取联赛轮次、排名及比分信息
         l_r_info = get_league_round_info(soup)
-        print(l_r_info)
         f.write("\n  联赛轮次、队伍排名：\n")
         f.write(f"  联赛轮次: {l_r_info['league_round']}\n")
         # 判断比分是否为空（之前逻辑是VS则为空）
@@ -883,8 +882,6 @@ def process_single_match(fid, league, home, away, m_time, folder_path):
         except Exception as e:
             f.write(f"  大小指数页面访问异常: {e}\n")
         
-        # --- 第三部分：处理让球 ---
-        handle_rangqiu_section(fid, f, headers)
         f.write("\n\n")
         print(f"  [完成] 数据已存至: {file_name_s}")
 
@@ -986,19 +983,16 @@ def scrape_500_full_data(start_dt, end_dt, target_fids=None):
                     f.write(f"{'='*60}\n")
                     f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away} | ID: {fid}\n")
                     f.write(f"{'='*60}\n")
-                    """
-                    f.write("Whoscored赛事网址：\n")
+                    f.write("Whoscored赛事网址：\n\n")
+                    f.write("Transfermarkt赛事网址：\n\n")
                     f.write("Whoscored预计阵容：\n")
-                    f.write("主队阵容：\n")
-                    f.write("客队阵容：\n")
-                    f.write("Transfermarkt赛事网址：\n")
+                    f.write("主队阵容：\n\n")
+                    f.write("客队阵容：\n\n")                    
                     f.write("Transfermarkt伤停信息：\n")
-                    f.write("主队伤停：\n")
-                    f.write("客队伤停：\n")
-                    f.write("-"*80 + "\n")
-                    """
-                    f.write("\n\n")
-
+                    f.write("主队伤停：\n\n")
+                    f.write("客队伤停：\n\n")
+                    f.write("-"*60 + "\n")
+                    f.write("\n\n")                    
                     print(f"正在获取: [{match_dt_str}] {home} VS {away} 的亚盘、大小球、让球、欧赔信息")
                     # 调用单场处理函数
                     process_single_match(fid, league, home, away, match_dt_str, dir_name)
@@ -1011,7 +1005,7 @@ def scrape_500_full_data(start_dt, end_dt, target_fids=None):
             else:
                 print(f"\n任务完成！共处理 {count} 场比赛，存入: {dir_name}")
 
-#        print(f"\n所有比赛信息已写入全部赛事信息.txt")
+        print(f"\n所有比赛信息已写入全部赛事信息.txt")
 
     except Exception as e:
         import traceback
