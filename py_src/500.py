@@ -892,11 +892,12 @@ def process_single_match(fid, league, home, away, m_time, folder_path):
         print(f"  [完成] 数据已存至: {file_name_r}")
 
 # 获取所有比赛的“亚盘、大小球、让球、欧赔”数据
-def scrape_500_full_data(start_dt, end_dt):
+def scrape_500_full_data(start_dt, end_dt, target_fids=None):
     """
     根据时间范围对比赛进行筛选
     :param start_dt: 范围起始时间
     :param end_dt: 范围结束时间
+    :param target_fids: 指定的比赛 ID 列表 (list)
     """
     headers = {'User-Agent': USERAGENT}
     
@@ -924,67 +925,98 @@ def scrape_500_full_data(start_dt, end_dt):
         file_path_all = os.path.join(BASE_DIR, dir_name, '全部赛事信息.txt')
         with open(file_path_all, 'w', encoding='utf-8') as f:
             for row in match_rows:
-                # 1. 提取联赛名并过滤 (增加 strip 防止空格干扰)
-                league = row.get('data-simpleleague', '未知联赛').strip()
-                if TARGET_LEAGUES and not any(name in league for name in TARGET_LEAGUES):
-                    continue
-
-                # 2. 去重逻辑
+                # 去重逻辑
                 fid = row.get('data-fixtureid')
                 if not fid or fid in seen_ids:
                     continue # 如果 ID 已存在或为空，跳过此行
 
+                # 提取联赛名并过滤 (增加 strip 防止空格干扰)
+                league = row.get('data-simpleleague', '未知联赛').strip()
                 # 提取比赛日期和时间
-                m_date = row.get('data-matchdate')
-                m_time = row.get('data-matchtime')
-                if not m_date or not m_time: continue
-
-                # 将比赛时间转为对象
-                match_dt = datetime.strptime(f"{m_date} {m_time}", "%Y-%m-%d %H:%M")
-
-                # --- 时间范围筛选逻辑 ---
-                if start_dt and end_dt:
-                    # 包含结束时间点
-                    if not (start_dt <= match_dt <= end_dt):
-                        continue
-
-                seen_ids.add(fid)
-
                 home = row.get('data-homesxname', '未知主队')
                 away = row.get('data-awaysxname', '未知客队')
-                # m_time = f"{row.get('data-matchdate', '')} {row.get('data-matchtime', '')}"
+                m_date = row.get('data-matchdate')
+                m_time = row.get('data-matchtime')
+                # 将比赛时间转为对象
+                match_dt_str = f"{m_date} {m_time}".strip()
+                
+                # 解析时间用于范围判断
+                current_match_dt = None
+                try:
+                    if m_date and m_time:
+                        current_match_dt = datetime.strptime(match_dt_str, "%Y-%m-%d %H:%M")
+                except:
+                    pass
 
-                f.write(f"{'='*60}\n")
-                f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away} | ID: {fid}\n")
-                f.write(f"{'='*60}\n")
-                f.write("Whoscored赛事网址：\n")
-                f.write("Whoscored预计阵容：\n")
-                f.write("主队阵容：\n")
-                f.write("客队阵容：\n")
-                f.write("Transfermarkt赛事网址：\n")
-                f.write("Transfermarkt伤停信息：\n")
-                f.write("主队伤停：\n")
-                f.write("客队伤停：\n")
-                f.write("-"*80 + "\n")
-                f.write("\n\n")
+                # --- 筛选逻辑开始 ---
+                should_scrape = False
+                if target_fids:
+                    # 如果指定了 FID 列表，只抓取列表内的 ID，忽略日期和联赛过滤
+                    if fid in target_fids:
+                        should_scrape = True
+                else: 
+                    # 按联赛和时间范围过滤
+                    league_match = True
+                    if TARGET_LEAGUES and not any(name in league for name in TARGET_LEAGUES):
+                        league_match = False
+                    
+                    time_match = True
+                    # --- 时间范围筛选逻辑 ---
+                    if start_dt and end_dt:
+                        # 包含结束时间点
+                        if not current_match_dt or not (start_dt <= current_match_dt <= end_dt):
+                            time_match = False
+                    
+                    if league_match and time_match:
+                        should_scrape = True
+                # --- 筛选逻辑结束 ---
 
-                print(f"正在获取: [{match_dt}] {home} VS {away} 的亚盘、大小球、让球、欧赔信息")
-                # 调用单场处理函数
-                process_single_match(fid, league, home, away, match_dt.strftime('%Y-%m-%d %H:%M'), dir_name)
-                count += 1
-                # 礼貌性停顿，防止被封 IP
-                time.sleep(random.uniform(1.5, 3.0))
+                # 执行抓取
+                if should_scrape:
+                    seen_ids.add(fid)
+                    
+                    f.write(f"{'='*60}\n")
+                    f.write(f"{league} | 比赛时间: {m_time} | {home} VS {away} | ID: {fid}\n")
+                    f.write(f"{'='*60}\n")
+                    """
+                    f.write("Whoscored赛事网址：\n")
+                    f.write("Whoscored预计阵容：\n")
+                    f.write("主队阵容：\n")
+                    f.write("客队阵容：\n")
+                    f.write("Transfermarkt赛事网址：\n")
+                    f.write("Transfermarkt伤停信息：\n")
+                    f.write("主队伤停：\n")
+                    f.write("客队伤停：\n")
+                    f.write("-"*80 + "\n")
+                    """
+                    f.write("\n\n")
+
+                    print(f"正在获取: [{match_dt_str}] {home} VS {away} 的亚盘、大小球、让球、欧赔信息")
+                    # 调用单场处理函数
+                    process_single_match(fid, league, home, away, match_dt_str, dir_name)
+                    count += 1
+                    # 礼貌性停顿，防止被封 IP
+                    time.sleep(random.uniform(1.5, 3.0))
             
-            print(f"\n任务完成！所有比赛已分类存入文件夹: {dir_name}")
-        print(f"\n所有比赛信息已写入全部赛事信息.txt")
+            if count == 0:
+                print(f"未匹配到任何比赛。")
+            else:
+                print(f"\n任务完成！共处理 {count} 场比赛，存入: {dir_name}")
+
+#        print(f"\n所有比赛信息已写入全部赛事信息.txt")
 
     except Exception as e:
+        import traceback
         print(f"[错误] 比赛数据获取程序意外中断: {e}")
+        traceback.print_exc() # 打印具体的错误堆栈，方便调试
 
 def main():
-    parser = argparse.ArgumentParser(description="500彩票网时间范围采集工具")
+    parser = argparse.ArgumentParser(description="500彩票网数据采集工具")
     # 设计参数 --range，接收如 "2026-01-10 00:00~2026-01-11 04:00"
     parser.add_argument('--range', type=str, help='时间范围。格式: "开始" 或 "开始~结束"')
+    # 设计参数 --fids, 接收如 "1222857,1199642,1205939,1199645,1202542,1216016"
+    parser.add_argument('--fids', type=str, help='指定比赛 ID 列表，逗号分隔。例如: 1222857,1199642')
+
     args = parser.parse_args()
 
     # 1. 解析时间范围
@@ -1005,8 +1037,15 @@ def main():
         if start_dt and end_dt:
             print(f"筛选区间: {start_dt} 之后的所有比赛" if end_dt.year == 9999 
                   else f"筛选区间: {start_dt} 至 {end_dt}")
+    
+    # 解析比赛id
+    target_fids = None
+    if args.fids:
+        # 将 "123,456" 转换为 ["123", "456"]
+        target_fids = [fid.strip() for fid in args.fids.split(',')]
+        print(f"指定抓取 赛事ID 模式: {target_fids}")
 
-    scrape_500_full_data(start_dt, end_dt)
+    scrape_500_full_data(start_dt, end_dt, target_fids=target_fids)
 
 if __name__ == "__main__":
     main()
