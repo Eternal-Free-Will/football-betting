@@ -96,15 +96,19 @@ def clean_hidden_tags(element):
 
 # 1. 获取赛事轮次、排名及比分信息
 def get_league_round_info(soup):
-    results = {"league_round": "", "current_score": "", "home": {}, "away": {}}
+    results = {"league_round": "", "current_score": "", "home": {"this_season": "", "last_league": "", "last_rank": ""}, "away": {"this_season": "", "last_league": "", "last_rank": ""}}
     # 定位核心容器
     header_cont = soup.find('div', class_='odds_hd_cont')
     if not header_cont:
         return results
 
-    tds = header_cont.find_all('td')
+    # , recursive=False
+    # 逐级找到 tr (因为 td 在 tr 下面)
+    # 注意：find 会自动向下找，所以可以直接跳过 table/tbody 找到 tr
+    target_tr = header_cont.find('tr')
+    tds = target_tr.find_all('td', recursive=False)
+
     if len(tds) < 5: 
-        print(len(tds))
         return results
 
     # --- 1. 解析联赛、轮次及比分 (第三个td) ---
@@ -118,7 +122,7 @@ def get_league_round_info(soup):
         results["current_score"] = "" if txt.upper() == "VS" else txt
 
     # 排名逻辑
-    def parse_rank(td_node):
+    def parse_rank(td_node, need_adjust = None):
         # 新增：存储上赛季联赛名称、名次
         this_season, last_season_num, last_season_league = "", "", ""
         lis = td_node.find_all('li')
@@ -133,6 +137,8 @@ def get_league_round_info(soup):
             li_text = rank_li.get_text()
             # 哪怕没有“赛前排名”，split 也会返回原字符串
             last_season_part = li_text.split("赛前排名")[0]
+            if need_adjust:
+                last_season_part = li_text.split("赛前排名")[1]
             # match.group(1) 是联赛名，match.group(2) 是排名数字
             last_match = re.search(r'上赛季(.*?)排名:\s*(\d+)', last_season_part)
             if last_match: 
@@ -141,7 +147,8 @@ def get_league_round_info(soup):
         return {"this_season": this_season, "last_league": last_season_league, "last_rank": last_season_num}
 
     results["home"] = parse_rank(tds[0])
-    results["away"] = parse_rank(tds[4])
+    results["away"] = parse_rank(tds[4], True)
+
     return results
 
 # 2. 获取两支球队的赛前联赛积分排名数据
@@ -366,6 +373,7 @@ def handle_data_analysis_section(fid, f, headers):
 
         # 1. 获取联赛轮次、排名及比分信息
         l_r_info = get_league_round_info(soup)
+        print(l_r_info)
         f.write("\n  联赛轮次、队伍排名：\n")
         f.write(f"  联赛轮次: {l_r_info['league_round']}\n")
         # 判断比分是否为空（之前逻辑是VS则为空）
