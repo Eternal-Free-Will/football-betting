@@ -79,6 +79,30 @@ def parse_custom_time(time_str):
 
 # --- Start 获取“数据分析”页面数据 ---
 
+import re
+
+def adjust_team_format(text):
+    # 正则表达式拆解：
+    # ^(\[\d+\])      : 必须以 [数字] 开头 (捕获组1: 主队排名)
+    # (.*?)           : 匹配主队名，直到遇到分隔符 (捕获组2: 主队名)
+    # \s*(VS|\d+:\d+)\s* : 匹配分隔符，支持 "VS" 或 "3:2" 这种比分格式 (捕获组3: 分隔符)
+    # (.*)            : 匹配剩下的所有内容 (捕获组4: 客队名+客队排名)
+    pattern = r'^(\[\d+\])(.*?)\s*(VS|\d+:\d+)\s*(.*)'
+    
+    match = re.search(pattern, text)
+    
+    if match:
+        home_rank = match.group(1)      # 例如: [10]
+        home_name = match.group(2).strip() # 例如: 德国
+        separator = match.group(3)      # 例如: VS 或 3:2
+        away_part = match.group(4).strip() # 例如: 加纳[77]
+        
+        # 返回格式：主队名 + 主队排名 + 分隔符 + 客队部分
+        return f"{home_name}{home_rank} {separator} {away_part}"
+    
+    # 如果不匹配（说明主队没有排名，或者格式不对），直接返回原始文本
+    return text
+
 # 通用清理函数：剔除 style='display: none' 的标签
 def clean_hidden_tags(element):
     if element:
@@ -235,13 +259,13 @@ def get_battle_history(soup):
         rows = table.find_all('tr', class_=lambda x: x in ['tr1', 'tr2'])
         for row in rows:
             # 预先移除所有 style="display: none;" 的标签（如赛前排名 [20]）
-            row = clean_hidden_tags(row)
+            # row = clean_hidden_tags(row)
 
             tds = row.find_all('td')
             # 联赛、日期、对阵(主队 比分 客队)、半场、赛果、欧指(胜/平/负)、亚指(水位 盘口 水位)、盘路(赢/输/走)、大小(大/小)
             if len(tds) >= 10:
                 results["records"].append([
-                    tds[0].get_text(strip=True),
+                    adjust_team_format(tds[0].get_text(strip=True)),
                     tds[1].get_text(strip=True),
                     tds[2].get_text(strip=True).replace(" : ", ":"),
                     tds[3].get_text(strip=True).replace(" : ", ":"),
@@ -273,7 +297,7 @@ def get_recent_10_records(soup):
         rows = table.find_all('tr', class_=lambda x: x in ['tr1', 'tr2'])
         for row in rows:
             # 预处理：剔除所有 style="display: none;" 的标签（如赛前排名 [11]）
-            row = clean_hidden_tags(row)
+            # row = clean_hidden_tags(row)
 
             # --- 2. 区分【统计行】与【比赛记录行】 ---
             # 比赛记录行带有 fid 属性，统计行没有
@@ -287,7 +311,7 @@ def get_recent_10_records(soup):
                     results[key]["records"].append([
                         tds[0].get_text(strip=True),
                         tds[1].get_text(strip=True),
-                        tds[2].get_text(strip=True).replace(" : ", ":"),
+                        adjust_team_format(tds[2].get_text(strip=True).replace(" : ", ":")),
                         tds[3].get_text(strip=True).replace(" : ", ":"),
                         tds[4].get_text(strip=True),
                         tds[5].get_text("/", strip=True), # 欧指使用/分隔（如 2.2/3.15/2.84）
@@ -325,12 +349,20 @@ def get_venue_records(soup):
         # 过滤行：只需要 tr1 和 tr2，排除 tr3 和表头
         rows = table.find_all('tr', class_=lambda x: x in ['tr1', 'tr2'])
         for row in rows:
-            row = clean_hidden_tags(row)
+            # row = clean_hidden_tags(row)
             tds = row.find_all('td')
 
             # 此类表格固定为 8 个 td：赛事、比赛日期、对阵(主队 比分 客队)、盘口、半场、赛果、盘路、大小
             if len(tds) >= 8:
-                results[key]["records"].append([td.get_text(strip=True).replace(" : ", ":") for td in tds])
+                results[key]["records"].append([
+                        tds[0].get_text(strip=True),
+                        tds[1].get_text(strip=True),
+                        adjust_team_format(tds[2].get_text(strip=True).replace(" : ", ":")),
+                        tds[3].get_text(strip=True),
+                        tds[4].get_text(strip=True).replace(" : ", ":"),
+                        tds[5].get_text(strip=True),
+                        tds[6].get_text(strip=True),
+                        tds[7].get_text(strip=True)])
     return results
 
 # 6. 获取未来赛事数据
