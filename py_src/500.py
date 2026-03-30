@@ -98,7 +98,8 @@ def adjust_team_format(text):
         away_part = match.group(4).strip() # 例如: 加纳[77]
         
         # 返回格式：主队名 + 主队排名 + 分隔符 + 客队部分
-        return f"{home_name}{home_rank} {separator} {away_part}"
+        # return f"{home_name}{home_rank}{separator}{away_part}"
+        return f"{home_rank}{home_name}{separator}{away_part}"
     
     # 如果不匹配（说明主队没有排名，或者格式不对），直接返回原始文本
     return text
@@ -265,9 +266,9 @@ def get_battle_history(soup):
             # 联赛、日期、对阵(主队 比分 客队)、半场、赛果、欧指(胜/平/负)、亚指(水位 盘口 水位)、盘路(赢/输/走)、大小(大/小)
             if len(tds) >= 10:
                 results["records"].append([
-                    adjust_team_format(tds[0].get_text(strip=True)),
+                    tds[0].get_text(strip=True),
                     tds[1].get_text(strip=True),
-                    tds[2].get_text(strip=True).replace(" : ", ":"),
+                    adjust_team_format(tds[2].get_text(strip=True).replace(" : ", ":")),
                     tds[3].get_text(strip=True).replace(" : ", ":"),
                     tds[4].get_text(strip=True),
                     tds[5].get_text("/", strip=True),
