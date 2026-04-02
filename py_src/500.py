@@ -430,7 +430,7 @@ def handle_data_analysis_section(fid, f, headers):
         # 2. 获取两支球队的赛前联赛积分排名数据
         p_m_rank = get_pre_match_rank(soup)
         # 比赛、胜、平、负、进、失、净、积分、排名、胜率
-        f.write("\n  赛前联赛积分排名数据：\n")
+        f.write("\n  赛前联赛积分排名数据：\n\n")
         # 内部辅助函数简化代码
         def write_rank_row(title, data_list):
             if data_list:
@@ -442,6 +442,8 @@ def handle_data_analysis_section(fid, f, headers):
             write_rank_row("客场", p_m_rank['home_rank']['away'])
         else: 
             f.write("  主队数据：暂无\n")
+
+        f.write("\n")
 
         if p_m_rank['away_rank']['total'][0]:
             f.write("  客队数据：\n")
@@ -455,9 +457,9 @@ def handle_data_analysis_section(fid, f, headers):
         # 3. 获取两队交战历史数据
         b_h = get_battle_history(soup)
         if len(b_h['records']): 
-            f.write("\n  两队交战历史数据：\n")
+            f.write("\n  两队交战历史数据：\n\n")
 
-            f.write(f"  数据概览：{b_h['summary']}\n")
+            f.write(f"  数据概览：{b_h['summary']}\n\n")
             # 联赛、日期、对阵(主队 比分 客队)、半场、赛果、欧指(胜/平/负)、亚指(水位 盘口 水位)、盘路(赢/输/走)、大小(大/小)
             for r in b_h['records']:
                 f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} 半场{r[3]:<6} {r[4]+'(赛果)':\u3000<6} {r[5]+'(平均欧赔)':\u3000<22} {r[6]+'(盘口)':\u3000<20} {r[7]+'(盘路)':\u3000<6} {r[8]+'(大小)':\u3000<6}\n")
@@ -467,7 +469,7 @@ def handle_data_analysis_section(fid, f, headers):
 
         # 4. 获取主客队近期10场比赛记录及统计概览
         r_10 = get_recent_10_records(soup)
-        f.write("\n  主客队近期10场比赛记录及统计概览：\n")        
+        f.write("\n  主客队近期10场比赛记录及统计概览：\n\n")        
         if len(r_10['home']['records']):
             f.write(f"  主队近期10场比赛记录：\n")
             f.write(f"  数据概览：{r_10['home']['summary']}\n")
@@ -477,6 +479,8 @@ def handle_data_analysis_section(fid, f, headers):
                 f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} 半场{r[3]:<6} {r[4]+'(赛果)':\u3000<6} {r[5]+'(平均欧赔)':\u3000<22} {r[6]+'(盘口)':\u3000<20} {r[7]+'(盘路)':\u3000<6} {r[8]+'(大小)':\u3000<6}\n")
         else:
             f.write(f"  主队近期10场比赛记录：暂无\n")
+        
+        f.write(f"\n")
         
         if len(r_10['away']['records']):
             f.write(f"  客队近期10场比赛记录：\n")
@@ -489,7 +493,7 @@ def handle_data_analysis_section(fid, f, headers):
         f.write("  " + "-"*50 + "\n")
 
         # 5. 获取主队在主场、客队在客场的近期比赛数据
-        f.write("\n  主队在主场、客队在客场的近期比赛数据：\n")
+        f.write("\n  主队在主场、客队在客场的近期比赛数据：\n\n")
         v_r = get_venue_records(soup)
         if len(v_r['home_at_home']['records']):
             f.write(f"  主队在主场近期比赛记录：\n")
@@ -500,6 +504,8 @@ def handle_data_analysis_section(fid, f, headers):
                 f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<16} {r[3]+'(盘口)':\u3000<10} 半场{r[4]:<6} {r[5]+'(赛果)':\u3000<6} {r[6]+'(盘路)':\u3000<6} {r[7]+'(大小)':\u3000<6}\n")
         else:
             f.write(f"  主队在主场近期比赛记录：暂无\n")
+
+        f.write(f"\n")
         
         if len(v_r['away_at_away']['records']):
             f.write(f"  客队在客场近期比赛记录：\n")
@@ -514,7 +520,7 @@ def handle_data_analysis_section(fid, f, headers):
 
         # 6. 获取未来赛事数据
         f_m = get_future_matches(soup)
-        f.write("\n  主队、客队未来赛事数据：\n")        
+        f.write("\n  主队、客队未来赛事数据：\n\n")        
 
         f.write(f"  主队未来赛事：\n")
         if f_m['home']:
@@ -523,6 +529,8 @@ def handle_data_analysis_section(fid, f, headers):
                 f.write(f"  {r[0]:\u3000<6} {r[1]:<12} {r[2]:\u3000<12} 距离天数{r[3]:<4}\n")
         else:
             f.write("  主队未来暂无赛事！\n")
+
+        f.write(f"\n")
         
         f.write(f"  客队未来赛事：\n")
         if f_m['away']:
